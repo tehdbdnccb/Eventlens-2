@@ -1,0 +1,15 @@
+import {fairProbability,momentum,orderBookImbalance,scoreSignal,confidence,crossWindowDeviation} from '@eventlens/quant';
+import type {Market,Signal,OrderBook} from '@eventlens/shared';
+
+export function buildSignal(m:Market,all:Market[],book:OrderBook):Signal{
+  const tau=Math.max((m.expiry-Date.now())/1000,1);
+  const vol=m.asset==='BTC'?.72:.95;
+  const model=fairProbability(m.currentPrice,m.openPrice,vol,tau);
+  const edge=model-m.upPrice;
+  const obi=orderBookImbalance(book.bids,book.asks);
+  const mom=momentum(m.currentPrice,m.openPrice);
+  const peers=all.filter(x=>x.asset===m.asset&&x.marketId!==m.marketId).map(x=>x.upPrice);
+  const term=crossWindowDeviation(m.upPrice,peers);
+  const score=scoreSignal(edge,obi,mom,term);
+  return {direction:score>.20?'UP':score<-.20?'DOWN':'HOLD',marketProbability:m.upPrice,modelProbability:model,edge,confidence:confidence(edge,obi,mom,term),score,momentum:mom,volatility:vol,obi,termStructure:term,rationale:[`Market implies ${(m.upPrice*100).toFixed(1)}% Up`,`Model fair value ${(model*100).toFixed(1)}%`,`Order-book imbalance ${(obi*100).toFixed(1)}%`,`Momentum ${(mom*100).toFixed(2)}%`,`Cross-window deviation ${(term*100).toFixed(1)}%`,`Composite score ${(score*100).toFixed(1)} points`]};
+}
